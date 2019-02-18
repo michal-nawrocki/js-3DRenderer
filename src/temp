@@ -1,8 +1,9 @@
 const width = 600, height = 600; fFov = 90.0
 var canvas = document.getElementById('canvas');
 var ctx = canvas.getContext('2d');
-var tOG = performance.now();
-
+var tp1 = performance.now();
+var tp2 = performance.now();
+console.log(tp1);
 class vec3d {
     constructor(x, y, z) {
         this.x = x;
@@ -56,12 +57,10 @@ function multiplyMatrixVector(i, o, m){
     o.z = i.x * m[0][2] + i.y * m[1][2] + i.z * m[2][2] + m[3][2];
     var w = i.x * m[0][3] + i.y * m[1][3] + i.z * m[2][3] + m[3][3];
 
-    if (w != 0.0)
-    {
-        o.x /= w; o.y /= w; o.z /= w;
-    }
+    o.x /= w; o.y /= w; o.z /= w;
 
-    return m;
+
+    return o;
 }
 
 var cube = {
@@ -88,15 +87,15 @@ var cube = {
 
         // BOTTOM
         new triangle( new vec3d(1.0, 0.0, 1.0),    new vec3d(0.0, 0.0, 1.0),    new vec3d(0.0, 0.0, 0.0) ),
-        new triangle( new vec3d(1.0, 0.0, 1.0),    new vec3d(0.0, 0.0, 0.0),    new vec3d(1.0, 0.0, 0.0) ),
+        new triangle( new vec3d(1.0, 0.0, 1.0),    new vec3d(0.0, 0.0, 0.0),    new vec3d(1.0, 0.0, 0.0) )
     ]
 }
 
 var projectionMat = {
     fNear : 0.1,
     fFar : 1000.0,
-    fAspectRatio : height/width,
-    fFovRad : 1 / (Math.tan(fFov * 0.5 / 180.0 * 3.14159)),
+    fAspectRatio : width/height,
+    fFovRad : 1 / Math.tan(fFov * 0.5 / 180.0 * 3.14159),
     m : mat4x4(),
 }
 
@@ -134,13 +133,21 @@ function drawTriangleStroke(tri, color){
 }
 
 function render(){
+
     // Clear screen before drawing new frame
-    var t0 = performance.now();
     ctx.clearRect(0,0, width, height);
 
+    // Calculate elapsed time
+    tp2 = performance.now();
+    console.log(tp1);
+    console.log(tp2);
+    var elapsedTime = tp2 - tp1;
+    tp1 = tp2 + 0;
+
+
     var mRotZ = mat4x4(), mRotX = mat4x4();
-    var fTheta = 0;
-    fTheta += 0.001 * (tOG - t0);
+    var fTheta = 1;
+    fTheta += 1.5;
 
     // Rotation Z
     mRotZ[0][0] = Math.cos(fTheta);
@@ -152,33 +159,43 @@ function render(){
 
     // Rotation X
     mRotX[0][0] = 1;
-    mRotX[1][1] = Math.cos(fTheta * 0.5);
-    mRotX[1][2] = Math.sin(fTheta * 0.5);
-    mRotX[2][1] = -Math.sin(fTheta * 0.5);
+    mRotX[0][1] = Math.cos(fTheta * 0.5);
+    mRotX[1][0] = Math.sin(fTheta * 0.5);
+    mRotX[1][1] = -Math.sin(fTheta * 0.5);
     mRotX[2][2] = Math.cos(fTheta * 0.5);
     mRotX[3][3] = 1;
 
+    console.log("Triangles: ");
     for (var tris of cube.mesh) {
         let triProjected = new triangle(new vec3d(0, 0, 0), new vec3d(0, 0, 0), new vec3d(0, 0, 0));
         let triRotatedZ = new triangle(new vec3d(0, 0, 0), new vec3d(0, 0, 0), new vec3d(0, 0, 0));
         let triRotatedZX = new triangle(new vec3d(0, 0, 0), new vec3d(0, 0, 0), new vec3d(0, 0, 0));
 
+        console.log("No axis");
+        console.log(tris);
 
         // Rotated on Z-axis
         multiplyMatrixVector(tris.p0, triRotatedZ.p0, mRotZ);
-        multiplyMatrixVector(tris.p1, triRotatedZ.p1, mRotZ);
+        var kek = multiplyMatrixVector(tris.p1, triRotatedZ.p1, mRotZ);
         multiplyMatrixVector(tris.p2, triRotatedZ.p2, mRotZ);
+
+        console.log(kek);
+        console.log("Z axis");
+        console.log(triRotatedZ);
 
         // Rotated on X-axis
         multiplyMatrixVector(triRotatedZ.p0, triRotatedZX.p0, mRotX);
         multiplyMatrixVector(triRotatedZ.p1, triRotatedZX.p1, mRotX);
         multiplyMatrixVector(triRotatedZ.p2, triRotatedZX.p2, mRotX);
 
+        console.log("ZX axis");
+        console.log(triRotatedZX);
+
         // Translate the triangle
         let triTranslated = new triangle(triRotatedZX.p0.getVec(), triRotatedZX.p1.getVec(), triRotatedZX.p2.getVec());
-        triTranslated.p0.z = tris.p0.z + 1.0;
-        triTranslated.p1.z = tris.p1.z + 1.0;
-        triTranslated.p2.z = tris.p2.z + 1.0;    
+        triTranslated.p0.z = tris.p0.z + 3.0;
+        triTranslated.p1.z = tris.p1.z + 3.0;
+        triTranslated.p2.z = tris.p2.z + 3.0;    
 
         // Project triangle on perspective
         multiplyMatrixVector(triTranslated.p0, triProjected.p0, projectionMat.m);
@@ -195,12 +212,14 @@ function render(){
         triProjected.p2.x *= 0.5 * width; triProjected.p2.y *= 0.5 * height;
 
         // Draw the wireframe of the triangle
-        drawTriangleStroke(triProjected, "white");
+        drawTriangle(triProjected, "white");
+        console.log(triProjected);
     }
     
-    // Calculate difference to get FPS
-    var t1 = performance.now();
-    console.log("Call to doSomething took " + 1/(t1 - t0) + " milliseconds.");
+    let fps = 1.0 /  elapsedTime;
+    console.log("Call to doSomething took " + (1/elapsedTime) + " milliseconds." + elapsedTime);
+    document.title = "FPS: " + fps;
+
 
     //repeat the drawing
     requestAnimationFrame(render);
