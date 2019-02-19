@@ -1,7 +1,10 @@
-const width = 600, height = 600; fFov = 90.0
+const width = 600, height = 600; fFov = 70.0
 var canvas = document.getElementById('canvas');
 var ctx = canvas.getContext('2d');
-var tOG = performance.now();
+var lastLoop = new Date();
+let fps = 1;
+let fTheta = 1;
+var continueKey = false;
 
 class vec3d {
     constructor(x, y, z) {
@@ -49,19 +52,22 @@ function mat4x4() {
     return matrix;
 }
 
-function multiplyMatrixVector(i, o, m){
+function multiplyMatrixVector(i, m){
 
-    o.x = i.x * m[0][0] + i.y * m[1][0] + i.z * m[2][0] + m[3][0];
-    o.y = i.x * m[0][1] + i.y * m[1][1] + i.z * m[2][1] + m[3][1];
-    o.z = i.x * m[0][2] + i.y * m[1][2] + i.z * m[2][2] + m[3][2];
-    var w = i.x * m[0][3] + i.y * m[1][3] + i.z * m[2][3] + m[3][3];
+    let o = new vec3d(0,0,0);
 
-    if (w != 0.0)
-    {
-        o.x /= w; o.y /= w; o.z /= w;
+    o.x     = i.x * m[0][0] + i.y * m[1][0] + i.z * m[2][0] + m[3][0];
+    o.y     = i.x * m[0][1] + i.y * m[1][1] + i.z * m[2][1] + m[3][1];
+    o.z     = i.x * m[0][2] + i.y * m[1][2] + i.z * m[2][2] + m[3][2];
+    var w   = i.x * m[0][3] + i.y * m[1][3] + i.z * m[2][3] + m[3][3];
+
+    if(w != 0){
+        o.x = o.x / w ;
+        o.y = o.y / w;
+        o.z = o.z / w;
     }
 
-    return m;
+    return o;
 }
 
 var cube = {
@@ -93,18 +99,21 @@ var cube = {
 }
 
 var projectionMat = {
-    fNear : 0.1,
-    fFar : 1000.0,
-    fAspectRatio : height/width,
-    fFovRad : 1 / (Math.tan(fFov * 0.5 / 180.0 * 3.14159)),
     m : mat4x4(),
 }
 
 function initiateMat(){
-    projectionMat.m[0][0] = projectionMat.fAspectRatio * projectionMat.fFovRad;
-    projectionMat.m[1][1] = projectionMat.fFovRad;
-    projectionMat.m[2][2] = projectionMat.fFar / (projectionMat.fFar - projectionMat.fNear);
-    projectionMat.m[3][2] = (-projectionMat.fFar * projectionMat.fNear) / (projectionMat.fFar - projectionMat.fNear);
+
+    var fNear = 0.1;
+    var fFar = 1000;
+    var fFov = 90;
+    var fAspectRatio = height / width;
+    var fFovRad = 1.0 / Math.tan(fFov * 0.5 / 180.0 * 3.14159);
+
+    projectionMat.m[0][0] = fAspectRatio * fFovRad;
+    projectionMat.m[1][1] = fFovRad;
+    projectionMat.m[2][2] = fFar / (fFar - fNear);
+    projectionMat.m[3][2] = (-fFar * fNear) / (fFar - fNear);
     projectionMat.m[2][3] = 1.0;
     projectionMat.m[3][3] = 0.0;
 }
@@ -114,7 +123,7 @@ function drawPoint(x,y, color){
     ctx.strokeStyle = color;
 }
 
-function drawTriangle(tri, color){
+function drawTriangle(tri){
     ctx.beginPath();
     ctx.moveTo(tri.p0.x, tri.p0.y);
     ctx.lineTo(tri.p1.x, tri.p1.y);
@@ -126,8 +135,8 @@ function drawTriangle(tri, color){
 function drawTriangleStroke(tri, color){
     ctx.beginPath();
     ctx.moveTo(tri.p0.x, tri.p0.y);
-    ctx.lineTo(tri.p1.x, tri.p1.y);
     ctx.lineTo(tri.p2.x, tri.p2.y);
+    ctx.lineTo(tri.p1.x, tri.p1.y);
     ctx.lineWidth = 4;
     ctx.strokeStyle = "white";
     ctx.stroke();
@@ -135,12 +144,14 @@ function drawTriangleStroke(tri, color){
 
 function render(){
     // Clear screen before drawing new frame
-    var t0 = performance.now();
+    const now = performance.now();
     ctx.clearRect(0,0, width, height);
 
     var mRotZ = mat4x4(), mRotX = mat4x4();
-    var fTheta = 0;
-    fTheta += 0.001 * (tOG - t0);
+    
+    fTheta += 1*(1/fps);
+
+    console.log(fTheta);
 
     // Rotation Z
     mRotZ[0][0] = Math.cos(fTheta);
@@ -158,32 +169,33 @@ function render(){
     mRotX[2][2] = Math.cos(fTheta * 0.5);
     mRotX[3][3] = 1;
 
+
     for (var tris of cube.mesh) {
-        let triProjected = new triangle(new vec3d(0, 0, 0), new vec3d(0, 0, 0), new vec3d(0, 0, 0));
-        let triRotatedZ = new triangle(new vec3d(0, 0, 0), new vec3d(0, 0, 0), new vec3d(0, 0, 0));
-        let triRotatedZX = new triangle(new vec3d(0, 0, 0), new vec3d(0, 0, 0), new vec3d(0, 0, 0));
+        var triProjected = new triangle(new vec3d(0, 0, 0), new vec3d(0, 0, 0), new vec3d(0, 0, 0));
+        var triRotatedZ = new triangle(new vec3d(0, 0, 0), new vec3d(0, 0, 0), new vec3d(0, 0, 0));
+        var triRotatedZX = new triangle(new vec3d(0, 0, 0), new vec3d(0, 0, 0), new vec3d(0, 0, 0));
 
 
         // Rotated on Z-axis
-        multiplyMatrixVector(tris.p0, triRotatedZ.p0, mRotZ);
-        multiplyMatrixVector(tris.p1, triRotatedZ.p1, mRotZ);
-        multiplyMatrixVector(tris.p2, triRotatedZ.p2, mRotZ);
+        triRotatedZ.p0 = multiplyMatrixVector(tris.p0, mRotZ);
+        triRotatedZ.p1 = multiplyMatrixVector(tris.p1, mRotZ);
+        triRotatedZ.p2 = multiplyMatrixVector(tris.p2, mRotZ);
 
         // Rotated on X-axis
-        multiplyMatrixVector(triRotatedZ.p0, triRotatedZX.p0, mRotX);
-        multiplyMatrixVector(triRotatedZ.p1, triRotatedZX.p1, mRotX);
-        multiplyMatrixVector(triRotatedZ.p2, triRotatedZX.p2, mRotX);
+        triRotatedZX.p0 = multiplyMatrixVector(triRotatedZ.p0, mRotX);
+        triRotatedZX.p1 = multiplyMatrixVector(triRotatedZ.p1, mRotX);
+        triRotatedZX.p2 = multiplyMatrixVector(triRotatedZ.p2, mRotX);
 
         // Translate the triangle
         let triTranslated = new triangle(triRotatedZX.p0.getVec(), triRotatedZX.p1.getVec(), triRotatedZX.p2.getVec());
-        triTranslated.p0.z = tris.p0.z + 1.0;
-        triTranslated.p1.z = tris.p1.z + 1.0;
-        triTranslated.p2.z = tris.p2.z + 1.0;    
+        triTranslated.p0.z = triRotatedZX.p0.z + 5.0;
+        triTranslated.p1.z = triRotatedZX.p1.z + 5.0;
+        triTranslated.p2.z = triRotatedZX.p2.z + 5.0;    
 
         // Project triangle on perspective
-        multiplyMatrixVector(triTranslated.p0, triProjected.p0, projectionMat.m);
-        multiplyMatrixVector(triTranslated.p1, triProjected.p1, projectionMat.m);
-        multiplyMatrixVector(triTranslated.p2, triProjected.p2, projectionMat.m);
+        triProjected.p0 = multiplyMatrixVector(triTranslated.p0, projectionMat.m);
+        triProjected.p1 = multiplyMatrixVector(triTranslated.p1, projectionMat.m);
+        triProjected.p2 = multiplyMatrixVector(triTranslated.p2, projectionMat.m);
 
         // Scale into view
         triProjected.p0.x += 1; triProjected.p0.y += 1;
@@ -195,12 +207,16 @@ function render(){
         triProjected.p2.x *= 0.5 * width; triProjected.p2.y *= 0.5 * height;
 
         // Draw the wireframe of the triangle
-        drawTriangleStroke(triProjected, "white");
+        console.log(triProjected);
+        drawTriangle(triProjected);
+
     }
     
     // Calculate difference to get FPS
-    var t1 = performance.now();
-    console.log("Call to doSomething took " + 1/(t1 - t0) + " milliseconds.");
+    var thisLoop = new Date();
+    fps = 1000 / (thisLoop - lastLoop);
+    lastLoop = thisLoop;
+    document.title = "FPS: " + fps;
 
     //repeat the drawing
     requestAnimationFrame(render);
